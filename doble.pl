@@ -1,3 +1,5 @@
+#!perl
+
 # doble - The javadoc tool
 # By: Evan Pratten <ewpratten@retrylife.ca>
 
@@ -20,6 +22,7 @@ if (not defined $mode){
 print "Building javadoc\n";
 system("./gradlew javadoc --console=plain");
 
+# Deal with javascript bug
 print "Injecting javascript search bugfix\n";
 system("sed -i 's/useModuleDirectories/false/g' build/reports/docs/search.js");
 
@@ -33,5 +36,55 @@ if ($mode eq "-l"){
 
     # Start http server
     system("python -m SimpleHTTPServer 5806");
+
+} elsif ($mode eq "-p"){
+    print "Publishing documentation\n";
+
+    # Read the current git origin URL
+    my $origin = `git config --get remote.origin.url`;
+    chomp $origin;
+
+    # Read the repo name and dir
+    my $name = `basename \`git rev-parse --show-toplevel\``;
+    my $dir = `pwd`;
+    chomp $name;
+    chomp $dir;
+
+    print "Detected repo settings (Name: '$name', URL: '$origin')\n";
+
+    # Clone a copy of the current repo, one level up
+    chdir "../";
+    system("git clone '$origin' '$name-DOBLE_TMP'");
+    chdir "$name-DOBLE_TMP";
+
+    # Checkout the latest gh-pages branch (Redundant)
+    system("git checkout -b gh-pages");
+    system("git checkout gh-pages");
+
+    # Determine date string for branch name
+    my $date = `date +"%I_%M-%h%d"`;
+    chomp $date;
+
+    # Checkout a new branch for this docs release
+    my $new_branch = "javadoc-doble-$date";
+    system("git checkout -b $new_branch");
+
+    # Remove all branch contents
+    system("rm -rf ./*");
+
+    # Copy all documentation over to new branch
+    system("cp -r $dir/build/reports/docs/* .");
+
+    # Add all and make a commit for the new changes
+    system("git add .");
+    system("git commit -m \"Auto-authored by doble. Javadocs have been updated\"");
+
+    # Push the changes
+    system("git push --set-upstream origin $new_branch");
+    
+
+} else {
+    print "Invalid program arguments. Stopping\n";
+    exit 1;
 
 }
